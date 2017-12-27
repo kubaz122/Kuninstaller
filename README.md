@@ -1,4 +1,5 @@
 # Kuninstaller
 Program uninstaller for Linux
 
-To run program use "python3 Kuninstaller.py"
+To run program use:
+<code>./main.py</code>
