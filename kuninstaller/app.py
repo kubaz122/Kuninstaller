@@ -11,7 +11,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui = mainwindow.Ui_MainWindow()
         self.ui.setupUi(self)
         self.ui.actionQuit.triggered.connect(self.loadProgramsList)
-        self.loadProgramsList()
         self.ui.lineEdit.textChanged.connect(self.searchInList)
         self.ui.treeWidget.itemClicked[QtWidgets.QTreeWidgetItem, int].connect(self.printAppInfo)
         self.ui.treeWidget.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -22,6 +21,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.actionAbout_KDE.triggered.connect(self.aboutKDE)
 
         self.loadSettings()
+        self.loadProgramsList()
 
     def aboutKDE(self):
         os.popen("x-www-browser https://www.kde.org/community/whatiskde/")
@@ -31,7 +31,7 @@ class MainWindow(QtWidgets.QMainWindow):
         aboutdialog.show()
     
     def editSettings(self):
-        self.settingseditor = SettingsEditor(self.iconsize, self.sorting, self.autoremove)
+        self.settingseditor = SettingsEditor(self.iconsize, self.sorting, self.autoremove, self.icons)
         self.settingseditor.applysignal.connect(self.applySettings)
         retval = self.settingseditor.exec_()
         if retval == 1:
@@ -44,17 +44,20 @@ class MainWindow(QtWidgets.QMainWindow):
         config["Kuninstaller"]["icon_size"] = str(self.iconsize) 
         config["Kuninstaller"]["sorting"] = str(self.sorting)
         config["Kuninstaller"]["autoremove"] = str(self.autoremove)
+        config["Kuninstaller"]["icons"] = str(self.icons)
     
         with open(os.path.expanduser("~") + "/.config/Kuninstaller/settings.conf", 'w') as configfile:
             config.write(configfile)
             
-    def applySettings(self, iconsize,sorting,autoremove):
+    def applySettings(self, iconsize,sorting,autoremove, icons):
         self.iconsize = iconsize
         self.sorting = sorting
         self.autoremove = autoremove
+        self.icons = icons
         
         self.ui.treeWidget.setIconSize(QtCore.QSize(self.iconsize, self.iconsize))
         self.ui.treeWidget.setSortingEnabled(self.sorting)
+        self.loadProgramsList()
         
     def loadSettings(self):
         if not os.path.isfile(os.path.expanduser("~") + "/.config/Kuninstaller/settings.conf"):
@@ -64,7 +67,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 fconf.write("""[Kuninstaller]
 icon_size = 20
 sorting = False
-autoremove = True""")
+autoremove = True
+icons = True""")
             self.loadSettings()
         config = configparser.ConfigParser()
         config.read(os.path.expanduser("~") + "/.config/Kuninstaller/settings.conf")
@@ -72,6 +76,7 @@ autoremove = True""")
         self.iconsize = config["Kuninstaller"].getint("icon_size")
         self.sorting = config["Kuninstaller"].getboolean("sorting")
         self.autoremove = config["Kuninstaller"].getboolean("autoremove")
+        self.icons = config["Kuninstaller"].getboolean("icons")
 
         self.ui.treeWidget.setIconSize(QtCore.QSize(self.iconsize, self.iconsize))
         self.ui.treeWidget.setSortingEnabled(self.sorting)
@@ -105,7 +110,7 @@ autoremove = True""")
             
         self.loadProgramsList()
         
-    def aboutCurrentPkg(self):
+    def aboutCurrentPkg(self):  
         item = self.ui.treeWidget.currentItem()
         try:
             package = item.pkgname
@@ -132,22 +137,16 @@ autoremove = True""")
         menu.addAction(QtGui.QIcon.fromTheme("help-about"), _translate('MainWindow', "About this package"), self.aboutCurrentPkg)
         menu.exec_(self.ui.treeWidget.viewport().mapToGlobal(position))
     def printAppInfo(self, item, col):
+        self.threaclass = ThreadClass(item)
+        self.threaclass.readed.connect(self.printAppInfoSlot)
+        self.threaclass.start()
         
+    def printAppInfoSlot(self, itemicon, itemname, itemsize):
         self.ui.widget.setVisible(True)
+        self.ui.label_3.setText(itemname)
+        self.ui.label_4.setText(itemsize)
+        self.ui.label_2.setPixmap(itemicon)
         
-        icon = item.icon(0)
-        self.ui.label_2.setPixmap(icon.pixmap(icon.actualSize(QtCore.QSize(81, 71))))
-        self.ui.label_3.setText(item.text(0))
-        pkgname = subprocess.getoutput("dpkg -S '" + item.appconf + "'")
-        pkgname = pkgname.replace(": " + item.appconf, "")
-        cache = apt.Cache()
-        item.pkgname = pkgname
-        try:
-            pkg = cache[pkgname]
-        except:
-            item.removeChild(item)
-            return SystemError("The package can not be recognized.")
-        self.ui.label_4.setText("Total size: " + str(size(pkg.versions[0].size)))
     def searchInList(self):
         searchstr = self.ui.lineEdit.text()
         items = self.ui.treeWidget.findItems(searchstr,QtCore.Qt.MatchContains , 0)
@@ -176,9 +175,9 @@ autoremove = True""")
                         item.setText(0, config["Desktop Entry"]["Name"])
                     if "Comment" in config["Desktop Entry"]:
                         item.setText(1, config["Desktop Entry"]["Comment"])
-                    if "Icon" in config["Desktop Entry"] and os.path.isfile(config["Desktop Entry"]["Icon"]):
+                    if "Icon" in config["Desktop Entry"] and os.path.isfile(config["Desktop Entry"]["Icon"]) and self.icons:
                         item.setIcon(0, QtGui.QIcon(QtGui.QPixmap(config["Desktop Entry"]["Icon"])))
-                    elif "Icon" in config["Desktop Entry"]:
+                    elif "Icon" in config["Desktop Entry"] and self.icons:
                         item.setIcon(0, QtGui.QIcon.fromTheme(config["Desktop Entry"]["Icon"]))
                     item.appconf = appconf
         self.ui.treeWidget.resizeColumnToContents(0)
@@ -254,8 +253,8 @@ class RemovePkg(QtWidgets.QDialog):
         self.close()
         
 class SettingsEditor(QtWidgets.QDialog):
-    applysignal = QtCore.pyqtSignal(int, bool, bool)
-    def __init__(self, iconsize, sorting, autoremove):
+    applysignal = QtCore.pyqtSignal(int, bool, bool, bool)
+    def __init__(self, iconsize, sorting, autoremove, icons):
         QtWidgets.QDialog.__init__(self)
         self.ui = settings.Ui_Dialog()
         self.ui.setupUi(self)
@@ -269,23 +268,52 @@ class SettingsEditor(QtWidgets.QDialog):
         self.ui.checkBox.setChecked(sorting)
         self.ui.checkBox_2.setChecked(autoremove)
         self.ui.spinBox.setValue(iconsize)
+        self.ui.checkBox_3.setChecked(icons)
         
         self.ui.checkBox.stateChanged.connect(self.changeSettings)
         self.ui.spinBox.valueChanged.connect(self.changeSettings)
         self.ui.checkBox_2.stateChanged.connect(self.changeSettings)
+        self.ui.checkBox_3.stateChanged.connect(self.changeSettings)
     
     def okSettingsConnect(self):
-        self.applysignal.emit(self.iconsize, self.sorting, self.autoremove)
+        self.applysignal.emit(self.iconsize, self.sorting, self.autoremove, self.icons)
         self.accept()
     def changeSettings(self):
         self.iconsize = self.ui.spinBox.value()
         self.sorting = self.ui.checkBox.checkState()
         self.autoremove = self.ui.checkBox_2.checkState()
+        self.icons = self.ui.checkBox_3.checkState()
     def applySettingsConnect(self):
-        self.applysignal.emit(self.iconsize, self.sorting, self.autoremove)
+        self.applysignal.emit(self.iconsize, self.sorting, self.autoremove, self.icons)
         
 
+class ThreadClass(QtCore.QThread):
+    readed = QtCore.pyqtSignal(QtGui.QPixmap, str, str)
+    def __init__(self, item):
+        QtCore.QThread.__init__(self)
+        self.item = item
+    
+    def __del__(self):
+        self.wait()
+        
+    def run(self):
+        item = self.item
+        icon = item.icon(0)
+        itemicon = icon.pixmap(icon.actualSize(QtCore.QSize(81, 71)))
+        itemname = item.text(0)
+        pkgname = subprocess.getoutput("dpkg -S '" + item.appconf + "'")
+        pkgname = pkgname.replace(": " + item.appconf, "")
+        cache = apt.Cache()
+        item.pkgname = pkgname
+        try:
+            pkg = cache[pkgname]
+        except:
+            item.removeChild(item)
+            return SystemError("The package can not be recognized.")
+        _translate = QtCore.QCoreApplication.translate
+        itemsize = _translate("MainWindow", "Total size: ") + str(size(pkg.versions[0].size))
 
+        self.readed.emit(itemicon, itemname, itemsize)
         
 app = QtWidgets.QApplication(sys.argv)
 
