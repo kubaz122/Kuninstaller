@@ -2,7 +2,8 @@
 Program uninstaller for Linux
 
 To run program use:
-<code>./main.py</code>
+
+<code>python3 main.py</code>
 
 Install dependencies:
 * apt
