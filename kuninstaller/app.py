@@ -2,7 +2,7 @@
 import sys
 from PyQt5 import QtWidgets, QtGui, QtCore, uic
 from hurry.filesize import size
-from kuninstaller.ui import mainwindow, aboutpackagedialog, removepkgdialog, settings
+from kuninstaller.ui import mainwindow, aboutpackagedialog, removepkgdialog, settings, about
 import os, configparser, locale, apt, subprocess, time
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -27,7 +27,8 @@ class MainWindow(QtWidgets.QMainWindow):
         os.popen("x-www-browser https://www.kde.org/community/whatiskde/")
     def aboutKuninstaller(self):
         aboutdialog = QtWidgets.QDialog(self)
-        uic.loadUi("./designer/about.ui", aboutdialog)
+        ui = about.Ui_Dialog()
+        ui.setupUi(aboutdialog)
         aboutdialog.show()
     
     def editSettings(self):
@@ -92,15 +93,15 @@ icons = True""")
             cache = apt.Cache()
             package = pkgname
         desktopconf = item.appconf
-        
-        buttonReply = QtWidgets.QMessageBox.question(self, package, "Uninstall " + item.text(0) + "?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+        _translate = QtCore.QCoreApplication.translate
+        buttonReply = QtWidgets.QMessageBox.question(self, package, _translate('MainWindow',"Uninstall ") + item.text(0) + "?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
         if buttonReply == QtWidgets.QMessageBox.Yes:
             cache = apt.Cache()
             try:
                 pkg = cache[package]
             except:
                 error_dialog = QtWidgets.QErrorMessage()
-                error_dialog.showMessage('The package can not be recognized.')
+                error_dialog.showMessage(_translate('MainWindow', 'The package can not be recognized.'))
                 error_dialog.exec_()
                 return None
             self.installprogress = RemovePkg(package, desktopconf)
@@ -187,7 +188,7 @@ class aboutPackageDialog(QtWidgets.QDialog):
         QtWidgets.QDialog.__init__(self)
         self.ui = aboutpackagedialog.Ui_Dialog()
         self.ui.setupUi(self)
-        
+        _translate = QtCore.QCoreApplication.translate
         config = configparser.ConfigParser()
         config.read(desktopconf)
         lang = locale
@@ -204,19 +205,19 @@ class aboutPackageDialog(QtWidgets.QDialog):
             self.ui.label_2.setPixmap(icon.pixmap(icon.actualSize(QtCore.QSize(81, 71))))
         
         self.ui.textBrowser.setVisible(False)
-        self.ui.label_3.setText("Package: " + package)
+        self.ui.label_3.setText(_translate('aboutPackageDialog', "Package: ") + package)
         
         cache = apt.Cache()
         try:
             pkg = cache[package]
         except:
             error_dialog = QtWidgets.QErrorMessage()
-            error_dialog.showMessage('The package can not be recognized.')
+            error_dialog.showMessage(_translate('aboutPackageDialog','The package can not be recognized.'))
             error_dialog.exec_()
             self.close()
             return None
         
-        self.ui.label_4.setText("Size: " + str(size(pkg.versions[0].size)))
+        self.ui.label_4.setText(_translate('aboutPackageDialog',"Size: ") + str(size(pkg.versions[0].size)))
         self.ui.textBrowser.setText(pkg.versions[0].raw_description)
         
         
@@ -314,6 +315,7 @@ class ThreadClass(QtCore.QThread):
         itemsize = _translate("MainWindow", "Total size: ") + str(size(pkg.versions[0].size))
 
         self.readed.emit(itemicon, itemname, itemsize)
+        self.wait()
         
 app = QtWidgets.QApplication(sys.argv)
 
